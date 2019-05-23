@@ -48,6 +48,30 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
   );
 }
 
+function traceGlassBug(
+  instance: TSInstance,
+  filePath: string,
+  outputText: string | null | undefined
+) {
+  const failed = outputText === null || outputText === undefined;
+
+  if (filePath.includes('reducer.ts')) {
+    const { writeFileSync } = require('fs');
+    writeFileSync(
+      failed ? 'ts-loader-debug-failed.txt' : 'ts-loader-debug-success.txt',
+      JSON.stringify({ filePath, instance }, null, 2)
+    );
+  }
+
+  if (failed) {
+    throw new Error(`
+!!!!!!!!!!!!! [referenced project]
+Managed to reproduced a ts-loader/ts bug on reducer.ts. Please examine 'ts-loader-* files.
+!!!!!!!!!!!!!
+`);
+  }
+}
+
 function successLoader(
   loaderContext: webpack.loader.LoaderContext,
   contents: string,
@@ -122,6 +146,9 @@ function successLoader(
     const mapFileName = jsFileName + '.map';
     const outputText = instance.compiler.sys.readFile(jsFileName);
     const sourceMapText = instance.compiler.sys.readFile(mapFileName);
+
+    traceGlassBug(instance, filePath, outputText);
+
     makeSourceMapAndFinish(
       sourceMapText,
       outputText,
@@ -136,6 +163,8 @@ function successLoader(
     const { outputText, sourceMapText } = options.transpileOnly
       ? getTranspilationEmit(filePath, contents, instance, loaderContext)
       : getEmit(rawFilePath, filePath, instance, loaderContext);
+
+    traceGlassBug(instance, filePath, outputText);
 
     makeSourceMapAndFinish(
       sourceMapText,
