@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as loaderUtils from 'loader-utils';
 import * as path from 'path';
 import * as typescript from 'typescript';
@@ -24,6 +25,12 @@ import {
 const webpackInstances: webpack.Compiler[] = [];
 const loaderOptionsCache: LoaderOptionsCache = {};
 
+let current = 0;
+
+const files_order: string[] = JSON.parse(
+  require('fs').readFileSync('./ts-file-list.json')
+);
+
 /**
  * The entry point for ts-loader
  */
@@ -39,13 +46,30 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
     return;
   }
 
-  return successLoader(
-    this,
-    contents,
-    callback,
-    options,
-    instanceOrError.instance!
-  );
+  const rawFilePath: any = path.normalize(this.resourcePath);
+
+  const retry = () => {
+    if (files_order.indexOf(rawFilePath) < 0) {
+      throw new Error(`Not found ${rawFilePath}`);
+    }
+
+    if (files_order.indexOf(rawFilePath) > current) {
+      setTimeout(retry, 100);
+    } else {
+      successLoader(
+        this,
+        contents,
+        callback,
+        options,
+        instanceOrError.instance!
+      );
+      current++;
+    }
+  };
+
+  retry();
+
+  return undefined;
 }
 
 function traceGlassBug(
@@ -63,13 +87,13 @@ function traceGlassBug(
     );
   }
 
-  if (failed) {
-    throw new Error(`
-!!!!!!!!!!!!! [referenced project]
-Managed to reproduced a ts-loader/ts bug on reducer.ts. Please examine 'ts-loader-* files.
-!!!!!!!!!!!!!
-`);
-  }
+  //   if (failed) {
+  //     throw new Error(`
+  // !!!!!!!!!!!!! [referenced project]
+  // Managed to reproduced a ts-loader/ts bug on reducer.ts. Please examine 'ts-loader-* files.
+  // !!!!!!!!!!!!!
+  // `);
+  //   }
 }
 
 function successLoader(
@@ -81,6 +105,8 @@ function successLoader(
 ) {
   const rawFilePath = path.normalize(loaderContext.resourcePath);
 
+  console.log(current + ': ' + rawFilePath);
+
   const filePath =
     options.appendTsSuffixTo.length > 0 || options.appendTsxSuffixTo.length > 0
       ? appendSuffixesIfMatch(
@@ -91,6 +117,8 @@ function successLoader(
           rawFilePath
         )
       : rawFilePath;
+
+  fs.appendFileSync('loader-files-order', filePath + '\n', 'utf-8');
 
   const fileVersion = updateFileInCache(filePath, contents, instance);
   const referencedProject = getAndCacheProjectReference(filePath, instance);
