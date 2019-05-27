@@ -24,6 +24,12 @@ import {
 const webpackInstances: webpack.Compiler[] = [];
 const loaderOptionsCache: LoaderOptionsCache = {};
 
+let current = 0;
+
+const files_order: string[] = JSON.parse(
+  require('fs').readFileSync('./ts-file-list.json')
+);
+
 /**
  * The entry point for ts-loader
  */
@@ -39,13 +45,39 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
     return;
   }
 
-  return successLoader(
-    this,
-    contents,
-    callback,
-    options,
-    instanceOrError.instance!
-  );
+  const rawFilePath: any = path.normalize(this.resourcePath);
+
+  const retry = () => {
+    const index = files_order.findIndex(pattern =>
+      rawFilePath.includes(pattern)
+    );
+
+    if (index < 0) {
+      throw new Error(
+        `Not pattern for file ${rawFilePath} in ts-file-list.json`
+      );
+    }
+
+    if (index > current) {
+      setTimeout(retry, 1000);
+    } else {
+      try {
+        successLoader(
+          this,
+          contents,
+          callback,
+          options,
+          instanceOrError.instance!
+        );
+      } finally {
+        current++;
+      }
+    }
+  };
+
+  retry();
+
+  return undefined;
 }
 
 function successLoader(
