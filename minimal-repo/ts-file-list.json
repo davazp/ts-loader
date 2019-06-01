@@ -1,0 +1,4 @@
+[
+  "packages/foo/foo.ts",
+  "packages/bar/bar.ts"
+]

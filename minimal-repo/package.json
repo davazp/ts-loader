@@ -1,0 +1,13 @@
+{
+  "name": "ts-loader-issue-minimal",
+  "version": "1.0.0",
+  "main": "index.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "../node_modules/.bin/webpack --mode=development"
+  },
+  "workspaces": [
+    "packages/*"
+  ]
+}
