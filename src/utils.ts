@@ -255,6 +255,24 @@ export function ensureProgram(instance: TSInstance) {
   return instance.program;
 }
 
+export function isRootFileOrExempt(
+  fileName: string,
+  instance: TSInstance
+): boolean {
+  if (instance.rootFileNames.has(fileName)) {
+    return true;
+  }
+
+  const file = instance.files.get(fileName);
+  // Indicates that ts-loader is tracking this file by a different path,
+  // so should be exempt from being in tsconfig’s root files.
+  if (file && file.realFileName) {
+    return true;
+  }
+
+  return false;
+}
+
 export function supportsProjectReferences(instance: TSInstance) {
   const program = ensureProgram(instance);
   return program && !!program.getProjectReferences;

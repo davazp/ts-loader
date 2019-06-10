@@ -3,5 +3,8 @@
     "target": "esnext",
     "jsx": "react",
     "noEmitOnError": true
-  }
+  },
+  "include": [
+    "*"
+  ]
 }

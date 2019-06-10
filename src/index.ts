@@ -23,6 +23,7 @@ import {
   formatErrors,
   getAndCacheOutputJSFileName,
   getAndCacheProjectReference,
+  isRootFileOrExempt,
   validateSourceMapOncePerProject
 } from './utils';
 
@@ -75,21 +76,10 @@ function successLoader(
 
   const { version: fileVersion, changedFilesList } = updateFileInCache(
     filePath,
+    loaderContext.resourcePath,
     contents,
     instance
   );
-
-  if (changedFilesList && !instance.rootFileNames.has(filePath)) {
-    reloadRootFileNamesFromConfig(loaderContext, instance);
-    if (
-      !instance.rootFileNames.has(filePath) &&
-      !options.onlyCompileBundledFiles
-    ) {
-      throw new Error(
-        `The file ${filePath} is not part of the project specified in tsconfig.json. Make sure it is covered by the fields 'include', 'exclude' and 'files'.`
-      );
-    }
-  }
 
   const referencedProject = getAndCacheProjectReference(filePath, instance);
   if (referencedProject !== undefined) {
@@ -155,6 +145,18 @@ function successLoader(
       callback
     );
   } else {
+    if (changedFilesList && !isRootFileOrExempt(filePath, instance)) {
+      reloadRootFileNamesFromConfig(loaderContext, instance);
+      if (
+        !instance.rootFileNames.has(filePath) &&
+        !options.onlyCompileBundledFiles
+      ) {
+        throw new Error(
+          `The file ${filePath} is not part of the project specified in tsconfig.json. Make sure it is covered by the fields 'include', 'exclude' and 'files'.`
+        );
+      }
+    }
+
     const { outputText, sourceMapText } = options.transpileOnly
       ? getTranspilationEmit(filePath, contents, instance, loaderContext)
       : getEmit(rawFilePath, filePath, instance, loaderContext);
@@ -396,9 +398,13 @@ function makeLoaderOptions(instanceName: string, loaderOptions: LoaderOptions) {
 /**
  * Either add file to the overall files cache or update it in the cache when the file contents have changed
  * Also add the file to the modified files
+ * @param internalFilePath The path ts-loader uses to track files and register them with the TypeScript compiler. Usually the same as `realFilePath`, but can be different if `loaderOptions.appendTsSuffixTo` or `loaderOptions.appendTsxSuffixTo` are set.
+ * @param realFilePath The absolute path of the input file on disk.
+ * @param contents The file contents as a string.
  */
 function updateFileInCache(
-  filePath: string,
+  internalFilePath: string,
+  realFilePath: string,
   contents: string,
   instance: TSInstance
 ) {
@@ -406,18 +412,18 @@ function updateFileInCache(
   let changedFilesList = false;
 
   // Update file contents
-  let file = instance.files.get(filePath);
+  let file = instance.files.get(internalFilePath);
   if (file === undefined) {
-    file = instance.otherFiles.get(filePath);
+    file = instance.otherFiles.get(internalFilePath);
     if (file !== undefined) {
-      instance.otherFiles.delete(filePath);
-      instance.files.set(filePath, file);
+      instance.otherFiles.delete(internalFilePath);
+      instance.files.set(internalFilePath, file);
     } else {
       if (instance.watchHost !== undefined) {
         fileWatcherEventKind = instance.compiler.FileWatcherEventKind.Created;
       }
       file = { version: 0 };
-      instance.files.set(filePath, file);
+      instance.files.set(internalFilePath, file);
     }
     changedFilesList = true;
     instance.changedFilesList = true;
@@ -430,7 +436,7 @@ function updateFileInCache(
   //
   // See https://github.com/TypeStrong/ts-loader/issues/943
   //
-  if (!instance.rootFileNames.has(filePath)) {
+  if (!instance.rootFileNames.has(internalFilePath)) {
     instance.version!++;
   }
 
@@ -450,17 +456,27 @@ function updateFileInCache(
     }
   }
 
+  // Set the real file path if it’s different than the one ts-loader generally uses
+  file.realFileName =
+    internalFilePath === realFilePath ? undefined : realFilePath;
+
   if (instance.watchHost !== undefined && fileWatcherEventKind !== undefined) {
     instance.hasUnaccountedModifiedFiles = true;
-    instance.watchHost.invokeFileWatcher(filePath, fileWatcherEventKind);
-    instance.watchHost.invokeDirectoryWatcher(path.dirname(filePath), filePath);
+    instance.watchHost.invokeFileWatcher(
+      internalFilePath,
+      fileWatcherEventKind
+    );
+    instance.watchHost.invokeDirectoryWatcher(
+      path.dirname(internalFilePath),
+      internalFilePath
+    );
   }
 
   // push this file to modified files hash.
   if (instance.modifiedFiles === null || instance.modifiedFiles === undefined) {
     instance.modifiedFiles = new Map<string, TSFile>();
   }
-  instance.modifiedFiles.set(filePath, file);
+  instance.modifiedFiles.set(internalFilePath, file);
   return {
     version: file.version,
     changedFilesList
