@@ -1,8 +1,1 @@
-{
-	"compilerOptions": {
-	    "include": [
-            "node_modules",
-            "app.ts"
-        ]
-	}
-}
+{}

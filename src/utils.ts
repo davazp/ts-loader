@@ -259,7 +259,11 @@ export function isRootFileOrExempt(
   fileName: string,
   instance: TSInstance
 ): boolean {
-  if (instance.rootFileNames.has(fileName)) {
+  // node_modules checking handled separately, later
+  if (
+    instance.rootFileNames.has(fileName) ||
+    fileName.indexOf('node_modules') > -1
+  ) {
     return true;
   }
 

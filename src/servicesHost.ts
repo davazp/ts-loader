@@ -96,8 +96,7 @@ export function makeServicesHost(
 
     getProjectReferences: () => projectReferences,
 
-    getScriptFileNames: () =>
-      [...files.keys()].filter(filePath => filePath.match(scriptRegex)),
+    getScriptFileNames: () => Array.from(instance.rootFileNames),
 
     getScriptVersion: (fileName: string) => {
       fileName = path.normalize(fileName);
@@ -351,7 +350,7 @@ export function makeWatchHost(
   return watchHost;
 
   function getRootFileNames() {
-    return [...files.keys()].filter(filePath => filePath.match(scriptRegex));
+    return Array.from(instance.rootFileNames);
   }
 
   function readFileWithCachingText(fileName: string, encoding?: string) {
