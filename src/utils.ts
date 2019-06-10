@@ -136,6 +136,22 @@ export function makeError(
   };
 }
 
+export function getPossiblyRenamedFilePath(
+  rawFilePath: string,
+  loaderOptions: LoaderOptions
+) {
+  return loaderOptions.appendTsSuffixTo.length > 0 ||
+    loaderOptions.appendTsxSuffixTo.length > 0
+    ? appendSuffixesIfMatch(
+        {
+          '.ts': loaderOptions.appendTsSuffixTo,
+          '.tsx': loaderOptions.appendTsxSuffixTo
+        },
+        rawFilePath
+      )
+    : rawFilePath;
+}
+
 export function appendSuffixIfMatch(
   patterns: RegExp[],
   filePath: string,
@@ -264,13 +280,6 @@ export function isRootFileOrExempt(
     instance.rootFileNames.has(fileName) ||
     fileName.indexOf('node_modules') > -1
   ) {
-    return true;
-  }
-
-  const file = instance.files.get(fileName);
-  // Indicates that ts-loader is tracking this file by a different path,
-  // so should be exempt from being in tsconfig’s root files.
-  if (file && file.realFileName) {
     return true;
   }
 

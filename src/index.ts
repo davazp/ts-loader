@@ -18,11 +18,11 @@ import {
   TSInstance
 } from './interfaces';
 import {
-  appendSuffixesIfMatch,
   arrify,
   formatErrors,
   getAndCacheOutputJSFileName,
   getAndCacheProjectReference,
+  getPossiblyRenamedFilePath,
   isRootFileOrExempt,
   validateSourceMapOncePerProject
 } from './utils';
@@ -63,22 +63,14 @@ function successLoader(
 ) {
   const rawFilePath = path.normalize(loaderContext.resourcePath);
 
-  const filePath =
-    options.appendTsSuffixTo.length > 0 || options.appendTsxSuffixTo.length > 0
-      ? appendSuffixesIfMatch(
-          {
-            '.ts': options.appendTsSuffixTo,
-            '.tsx': options.appendTsxSuffixTo
-          },
-          rawFilePath
-        )
-      : rawFilePath;
+  const filePath = getPossiblyRenamedFilePath(rawFilePath, options);
 
   const { version: fileVersion, changedFilesList } = updateFileInCache(
     filePath,
-    loaderContext.resourcePath,
+    rawFilePath,
     contents,
-    instance
+    instance,
+    options
   );
 
   const referencedProject = getAndCacheProjectReference(filePath, instance);
@@ -146,7 +138,7 @@ function successLoader(
     );
   } else {
     if (changedFilesList && !isRootFileOrExempt(filePath, instance)) {
-      reloadRootFileNamesFromConfig(loaderContext, instance);
+      reloadRootFileNamesFromConfig(loaderContext, instance, options);
       if (
         !instance.rootFileNames.has(filePath) &&
         !options.onlyCompileBundledFiles
@@ -180,28 +172,23 @@ function successLoader(
  */
 function reloadRootFileNamesFromConfig(
   loaderContext: webpack.loader.LoaderContext,
-  instance: TSInstance
+  instance: TSInstance,
+  options: LoaderOptions
 ) {
-  const {
-    compiler,
-    basePath,
-    configFile,
-    configFilePath,
-    colors,
-    loaderOptions
-  } = instance;
+  const { compiler, basePath, configFile, configFilePath, colors } = instance;
 
   const configParseResult = getConfigParseResult(
     compiler,
     configFile,
     basePath,
-    configFilePath
+    configFilePath,
+    options
   );
 
-  if (configParseResult.errors.length > 0 && !loaderOptions.happyPackMode) {
+  if (configParseResult.errors.length > 0 && !options.happyPackMode) {
     const errors = formatErrors(
       configParseResult.errors,
-      loaderOptions,
+      options,
       colors,
       compiler,
       { file: configFilePath },
@@ -213,7 +200,7 @@ function reloadRootFileNamesFromConfig(
     throw new Error(colors.red('error while parsing tsconfig.json'));
   }
 
-  updateInstanceRootFileNames(loaderOptions, instance, configParseResult);
+  updateInstanceRootFileNames(options, instance, configParseResult);
 
   return;
 }
@@ -398,32 +385,29 @@ function makeLoaderOptions(instanceName: string, loaderOptions: LoaderOptions) {
 /**
  * Either add file to the overall files cache or update it in the cache when the file contents have changed
  * Also add the file to the modified files
- * @param internalFilePath The path ts-loader uses to track files and register them with the TypeScript compiler. Usually the same as `realFilePath`, but can be different if `loaderOptions.appendTsSuffixTo` or `loaderOptions.appendTsxSuffixTo` are set.
- * @param realFilePath The absolute path of the input file on disk.
- * @param contents The file contents as a string.
  */
 function updateFileInCache(
-  internalFilePath: string,
-  realFilePath: string,
+  filePath: string,
   contents: string,
-  instance: TSInstance
+  instance: TSInstance,
+  options: LoaderOptions
 ) {
   let fileWatcherEventKind: typescript.FileWatcherEventKind | undefined;
   let changedFilesList = false;
 
   // Update file contents
-  let file = instance.files.get(internalFilePath);
+  let file = instance.files.get(filePath);
   if (file === undefined) {
-    file = instance.otherFiles.get(internalFilePath);
+    file = instance.otherFiles.get(filePath);
     if (file !== undefined) {
-      instance.otherFiles.delete(internalFilePath);
-      instance.files.set(internalFilePath, file);
+      instance.otherFiles.delete(filePath);
+      instance.files.set(filePath, file);
     } else {
       if (instance.watchHost !== undefined) {
         fileWatcherEventKind = instance.compiler.FileWatcherEventKind.Created;
       }
       file = { version: 0 };
-      instance.files.set(internalFilePath, file);
+      instance.files.set(filePath, file);
     }
     changedFilesList = true;
     instance.changedFilesList = true;
@@ -436,8 +420,11 @@ function updateFileInCache(
   //
   // See https://github.com/TypeStrong/ts-loader/issues/943
   //
-  if (!instance.rootFileNames.has(internalFilePath)) {
+  if (!instance.rootFileNames.has(filePath)) {
     instance.version!++;
+    if (options.onlyCompileBundledFiles) {
+      instance.rootFileNames.add(filePath);
+    }
   }
 
   if (instance.watchHost !== undefined && contents === undefined) {
@@ -456,27 +443,17 @@ function updateFileInCache(
     }
   }
 
-  // Set the real file path if it’s different than the one ts-loader generally uses
-  file.realFileName =
-    internalFilePath === realFilePath ? undefined : realFilePath;
-
   if (instance.watchHost !== undefined && fileWatcherEventKind !== undefined) {
     instance.hasUnaccountedModifiedFiles = true;
-    instance.watchHost.invokeFileWatcher(
-      internalFilePath,
-      fileWatcherEventKind
-    );
-    instance.watchHost.invokeDirectoryWatcher(
-      path.dirname(internalFilePath),
-      internalFilePath
-    );
+    instance.watchHost.invokeFileWatcher(filePath, fileWatcherEventKind);
+    instance.watchHost.invokeDirectoryWatcher(path.dirname(filePath), filePath);
   }
 
   // push this file to modified files hash.
   if (instance.modifiedFiles === null || instance.modifiedFiles === undefined) {
     instance.modifiedFiles = new Map<string, TSFile>();
   }
-  instance.modifiedFiles.set(internalFilePath, file);
+  instance.modifiedFiles.set(filePath, file);
   return {
     version: file.version,
     changedFilesList

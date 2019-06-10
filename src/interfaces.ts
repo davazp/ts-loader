@@ -179,8 +179,6 @@ export interface LoaderOptions {
 export interface TSFile {
   text?: string;
   version: number;
-  /** Only defined when ts-loader has renamed the file internally */
-  realFileName?: string;
   projectReference?: {
     /**
      * Undefined here means we’ve already checked and confirmed there is no

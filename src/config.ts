@@ -6,7 +6,7 @@ import * as webpack from 'webpack';
 
 import { ConfigFile, LoaderOptions, WebpackError } from './interfaces';
 import * as logger from './logger';
-import { formatErrors } from './utils';
+import { formatErrors, getPossiblyRenamedFilePath } from './utils';
 
 export function getConfigFile(
   compiler: typeof typescript,
@@ -122,11 +122,12 @@ export function getConfigParseResult(
   compiler: typeof typescript,
   configFile: ConfigFile,
   basePath: string,
-  configFilePath: string | undefined
+  configFilePath: string | undefined,
+  loaderOptions: LoaderOptions
 ) {
   const configParseResult = compiler.parseJsonConfigFileContent(
     configFile.config,
-    compiler.sys,
+    getSuffixAppendingParseConfigHost(compiler.sys, loaderOptions),
     basePath
   );
 
@@ -138,4 +139,50 @@ export function getConfigParseResult(
   }
 
   return configParseResult;
+}
+
+function getSuffixAppendingParseConfigHost(
+  sys: typescript.System,
+  loaderOptions: LoaderOptions
+): typescript.ParseConfigHost {
+  if (
+    !loaderOptions.appendTsSuffixTo.length &&
+    !loaderOptions.appendTsxSuffixTo.length
+  ) {
+    return sys;
+  }
+
+  return {
+    useCaseSensitiveFileNames: sys.useCaseSensitiveFileNames,
+    fileExists: mapArg(sys.fileExists, transformFileName),
+    readFile: mapArg(sys.readFile, transformFileName),
+    readDirectory: (rootDir, extensions, ...rest) => {
+      const allFiles = sys.readDirectory(rootDir);
+      const customExtensions = allFiles.reduce((exts: string[], fileName) => {
+        const renamed = transformFileName(fileName);
+        if (
+          renamed !== fileName &&
+          extensions.indexOf(path.extname(renamed).toLowerCase()) > -1
+        ) {
+          const ext = path.extname(fileName).toLowerCase();
+          if (ext) {
+            exts.push(ext);
+          }
+        }
+        return exts;
+      }, []);
+
+      return sys
+        .readDirectory(rootDir, extensions.concat(customExtensions), ...rest)
+        .map(transformFileName);
+    }
+  };
+
+  function transformFileName(rawFileName: string) {
+    return getPossiblyRenamedFilePath(rawFileName, loaderOptions);
+  }
+}
+
+function mapArg<T, U>(toWrap: (x: T) => U, wrapWith: (x: T) => T): (x: T) => U {
+  return x => toWrap(wrapWith(x));
 }
