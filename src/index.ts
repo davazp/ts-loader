@@ -67,7 +67,6 @@ function successLoader(
 
   const { version: fileVersion, changedFilesList } = updateFileInCache(
     filePath,
-    rawFilePath,
     contents,
     instance,
     options

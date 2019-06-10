@@ -22,6 +22,7 @@ import {
   appendSuffixesIfMatch,
   ensureProgram,
   formatErrors,
+  getOriginalFilePath,
   isUsingProjectReferences,
   makeError
 } from './utils';
@@ -255,7 +256,10 @@ function successfulTypeScriptInstance(
     instance.rootFileNames.forEach(filePath => {
       normalizedFilePath = path.normalize(filePath);
       files.set(normalizedFilePath, {
-        text: fs.readFileSync(normalizedFilePath, 'utf-8'),
+        text: fs.readFileSync(
+          getOriginalFilePath(normalizedFilePath, loaderOptions),
+          'utf-8'
+        ),
         version: 0
       });
     });

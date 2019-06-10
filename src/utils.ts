@@ -152,6 +152,51 @@ export function getPossiblyRenamedFilePath(
     : rawFilePath;
 }
 
+export function getOriginalFilePath(
+  possiblyRenamedFilePath: string,
+  loaderOptions: LoaderOptions
+) {
+  if (
+    loaderOptions.appendTsSuffixTo.length &&
+    possiblyRenamedFilePath.endsWith(typescript.Extension.Ts)
+  ) {
+    const maybeOriginal = stripEnd(
+      possiblyRenamedFilePath,
+      typescript.Extension.Ts.length
+    );
+    const renamedAgain = appendSuffixIfMatch(
+      loaderOptions.appendTsSuffixTo,
+      maybeOriginal,
+      typescript.Extension.Ts
+    );
+    if (renamedAgain === possiblyRenamedFilePath) {
+      return maybeOriginal;
+    }
+  }
+  if (
+    loaderOptions.appendTsxSuffixTo.length &&
+    possiblyRenamedFilePath.endsWith(typescript.Extension.Tsx)
+  ) {
+    const maybeOriginal = stripEnd(
+      possiblyRenamedFilePath,
+      typescript.Extension.Tsx.length
+    );
+    const renamedAgain = appendSuffixIfMatch(
+      loaderOptions.appendTsxSuffixTo,
+      maybeOriginal,
+      typescript.Extension.Tsx
+    );
+    if (renamedAgain === possiblyRenamedFilePath) {
+      return maybeOriginal;
+    }
+  }
+  return possiblyRenamedFilePath;
+}
+
+export function stripEnd(str: string, lengthToRemove: number) {
+  return str.slice(0, str.length - lengthToRemove);
+}
+
 export function appendSuffixIfMatch(
   patterns: RegExp[],
   filePath: string,
